@@ -63,3 +63,41 @@ body::before {
 .fade-up {
   animation: fade-up 0.4s ease-out both;
 }
+
+/* Staggered animation delays for news card lists */
+.fade-up-1 { animation: fade-up 0.4s ease-out 0.05s both; }
+.fade-up-2 { animation: fade-up 0.4s ease-out 0.10s both; }
+.fade-up-3 { animation: fade-up 0.4s ease-out 0.15s both; }
+.fade-up-4 { animation: fade-up 0.4s ease-out 0.20s both; }
+.fade-up-5 { animation: fade-up 0.4s ease-out 0.25s both; }
+
+/* Mobile overflow safety */
+* {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Constrain chart canvas on small screens */
+canvas {
+  max-width: 100%;
+}
+
+/* Button hover glow */
+.btn-primary {
+  transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+}
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.35);
+}
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Glass card hover effect */
+.glass-hover {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.glass-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}

@@ -162,9 +162,9 @@ export default function ForecastChart({ data }: ForecastChartProps) {
   };
 
   return (
-    <div id="price-chart" className="glass p-5 fade-up">
+    <div id="price-chart" className="glass glass-hover p-5 fade-up overflow-hidden">
       {/* Chart header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <p className="text-white/40 text-xs uppercase tracking-widest">30-Day Forecast</p>
           <p className="text-white text-2xl font-bold mt-0.5">
@@ -185,7 +185,9 @@ export default function ForecastChart({ data }: ForecastChartProps) {
       </div>
 
       {/* Chart canvas */}
-      <Line data={chartData} options={options} />
+      <div className="w-full overflow-hidden">
+        <Line data={chartData} options={options} />
+      </div>
     </div>
   );
 }

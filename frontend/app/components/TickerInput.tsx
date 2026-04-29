@@ -19,7 +19,7 @@ export default function TickerInput({ value, onChange, onSubmit, isLoading }: Ti
   };
 
   return (
-    <div className="flex gap-3 w-full max-w-xl mx-auto">
+    <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xl mx-auto">
       <div className="relative flex-1">
         {/* Search icon */}
         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25 text-lg select-none">
@@ -44,15 +44,15 @@ export default function TickerInput({ value, onChange, onSubmit, isLoading }: Ti
         id="analyze-button"
         onClick={onSubmit}
         disabled={isLoading || !value.trim()}
-        className="px-6 py-3.5 rounded-xl font-semibold text-base transition-all duration-200
-                   bg-violet-600 hover:bg-violet-500 active:scale-95
+        className="btn-primary px-6 py-3.5 rounded-xl font-semibold text-base
+                   bg-violet-600 hover:bg-violet-500
                    text-white shadow-lg shadow-violet-900/30
-                   disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100
-                   relative overflow-hidden"
+                   disabled:opacity-40 disabled:cursor-not-allowed
+                   w-full sm:w-auto"
         aria-label="Analyze ticker"
       >
         {isLoading ? (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center justify-center gap-2">
             <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
