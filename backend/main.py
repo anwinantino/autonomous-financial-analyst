@@ -39,14 +39,9 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allow the Vercel frontend domain and localhost for local development.
-# Update ALLOWED_ORIGINS in production to restrict to your actual Vercel URL.
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    # Add your Vercel deployment URL here once deployed, e.g.:
-    # "https://your-app.vercel.app",
-]
+# Allow all origins for Vercel preview environments and localhost.
+# In a strict production environment, this should be restricted.
+ALLOWED_ORIGINS = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
