@@ -1,8 +1,9 @@
 numpy<2.0
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
-yfinance==0.2.40
+yfinance
 prophet==1.1.5
+cmdstanpy<1.2
 google-generativeai==0.7.2
 duckduckgo-search==6.1.7
 pydantic==2.7.1

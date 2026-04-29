@@ -25,3 +25,6 @@ build/
 
 # Docker
 *.log
+
+# App Storage
+backend/app/storage/

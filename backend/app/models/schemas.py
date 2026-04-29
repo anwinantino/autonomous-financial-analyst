@@ -11,6 +11,16 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class ModelMetrics(BaseModel):
+    """Performance metrics for the forecasting model."""
+
+    mape: float = Field(..., description="Mean Absolute Percentage Error.")
+    rmse: float = Field(..., description="Root Mean Squared Error.")
+    directional_accuracy: float = Field(
+        ..., ge=0.0, le=1.0, description="Percentage of correct daily trend predictions."
+    )
+
+
 # ── /predict ─────────────────────────────────────────────────────────────────
 
 class PredictResponse(BaseModel):
@@ -33,6 +43,9 @@ class PredictResponse(BaseModel):
     )
     current_price: float = Field(
         ..., description="Most recent historical closing price."
+    )
+    metrics: ModelMetrics = Field(
+        ..., description="Performance evaluation of the model."
     )
 
 

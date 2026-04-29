@@ -5,6 +5,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/app/storage:/app/app/storage
     env_file:
       - ./backend/.env.local
     environment:
