@@ -41,11 +41,9 @@ export default function HomePage() {
     setIsPredicting(true);
     setIsAnalyzing(true);
 
-    // ── Parallel API calls (FR-013) ───────────────────────────────────────
     // /predict and /analyze fire simultaneously.
     // The graph renders as soon as /predict resolves,
     // without waiting for the slower /analyze call.
-
     const predictPromise = fetchPrediction(cleanTicker)
       .then((data) => {
         setPredictData(data);
@@ -58,7 +56,6 @@ export default function HomePage() {
       .finally(() => setIsPredicting(false));
 
     const analyzePromise = predictPromise.then((prediction) => {
-      // Pass the trend from /predict to /analyze to enable comparator logic
       const trend = prediction?.trend ?? "NEUTRAL";
       return fetchAnalysis(cleanTicker, trend)
         .then((data) => setAnalyzeData(data))
@@ -66,26 +63,31 @@ export default function HomePage() {
         .finally(() => setIsAnalyzing(false));
     });
 
-    // Suppress unhandled rejection warnings — errors are caught above
     void analyzePromise;
   };
 
   const isLoading = isPredicting || isAnalyzing;
+  const hasResults = predictData || analyzeData || predictError || analyzeError;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-violet-950 to-slate-900 px-4 py-12">
+    <main className="relative min-h-screen px-4 py-16 z-10">
       <div className="max-w-2xl mx-auto flex flex-col gap-10">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-white tracking-tight">
-            Autonomous Financial Analyst
+
+        {/* ── Header ──────────────────────────────────────────────────── */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-medium tracking-wide mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+            ML + AI · Prophet + Gemini
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight leading-tight">
+            Autonomous<br />Financial Analyst
           </h1>
-          <p className="mt-2 text-white/50 text-sm">
-            ML price forecast · AI news validation · Alignment verdict
+          <p className="text-white/40 text-sm max-w-sm mx-auto leading-relaxed">
+            Enter a ticker to get an ML price forecast, then see if the latest news agrees.
           </p>
         </div>
 
-        {/* Ticker Input */}
+        {/* ── Ticker Input ─────────────────────────────────────────────── */}
         <TickerInput
           value={ticker}
           onChange={setTicker}
@@ -93,34 +95,44 @@ export default function HomePage() {
           isLoading={isLoading}
         />
 
-        {/* Predict Section */}
-        {isPredicting && <LoadingSpinner message="Fetching prediction…" />}
-        {predictError && (
-          <div
-            id="predict-error"
-            className="text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm"
-          >
-            {predictError}
+        {/* ── Results ──────────────────────────────────────────────────── */}
+        {hasResults && (
+          <div className="flex flex-col gap-6">
+
+            {/* Predict section */}
+            {isPredicting && <LoadingSpinner message="Generating 30-day forecast…" />}
+            {predictError && (
+              <div
+                id="predict-error"
+                className="glass p-4 text-red-400 border-red-500/20 text-sm flex items-center gap-3"
+              >
+                <span className="text-lg">⚠️</span>
+                {predictError}
+              </div>
+            )}
+            {predictData && !isPredicting && <Chart data={predictData} />}
+
+            {/* Analyze section */}
+            {isAnalyzing && <LoadingSpinner message="Analyzing news sentiment with Gemini…" />}
+            {analyzeError && (
+              <div
+                id="analyze-error"
+                className="glass p-4 text-amber-400 border-amber-500/20 text-sm flex items-center gap-3"
+              >
+                <span className="text-lg">🔍</span>
+                {analyzeError}
+              </div>
+            )}
+            {analyzeData && !isAnalyzing && <Analysis data={analyzeData} />}
           </div>
         )}
-        {predictData && !isPredicting && <Chart data={predictData} />}
 
-        {/* Analyze Section */}
-        {isAnalyzing && <LoadingSpinner message="Analyzing news sentiment…" />}
-        {analyzeError && (
-          <div
-            id="analyze-error"
-            className="text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-sm"
-          >
-            {analyzeError}
-          </div>
-        )}
-        {analyzeData && !isAnalyzing && <Analysis data={analyzeData} />}
-
-        {/* Disclaimer */}
-        <footer className="text-center text-white/25 text-xs mt-4">
-          ⚠️ Not financial advice. For educational purposes only.
+        {/* ── Disclaimer ───────────────────────────────────────────────── */}
+        <footer className="text-center text-white/20 text-xs leading-relaxed mt-4 space-y-1">
+          <p>⚠️ Not financial advice. For educational purposes only.</p>
+          <p>Forecasts are generated by Prophet ML and validated by Gemini AI.</p>
         </footer>
+
       </div>
     </main>
   );
