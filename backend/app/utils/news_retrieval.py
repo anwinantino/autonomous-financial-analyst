@@ -39,18 +39,22 @@ def fetch_news(ticker: str) -> List[NewsArticle]:
 
     articles: List[NewsArticle] = []
 
-    with DDGS() as ddgs:
-        results = ddgs.news(query, max_results=MAX_ARTICLES)
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.news(query, max_results=MAX_ARTICLES)
 
-        for item in results:
-            snippet = _truncate(item.get("body", ""), SNIPPET_MAX_CHARS)
-            articles.append(
-                NewsArticle(
-                    title=item.get("title", "Untitled"),
-                    snippet=snippet,
-                    source=item.get("source", None),
+            for item in results:
+                snippet = _truncate(item.get("body", ""), SNIPPET_MAX_CHARS)
+                articles.append(
+                    NewsArticle(
+                        title=item.get("title", "Untitled"),
+                        snippet=snippet,
+                        source=item.get("source", None),
+                        url=item.get("url", "")
+                    )
                 )
-            )
+    except Exception as e:
+        logger.warning("DuckDuckGo search failed (possibly rate limited): %s", e)
 
     logger.info("Fetched %d articles | ticker=%s", len(articles), ticker)
     return articles

@@ -58,7 +58,7 @@ async def analyze(
 
     # Step 2: Gemini LLM sentiment analysis (graceful degradation)
     try:
-        llm_result = analyze_sentiment(ticker=ticker, trend=trend, articles=news_articles)
+        llm_result = await analyze_sentiment(ticker=ticker, trend=trend, news=news_articles)
         sentiment = llm_result["sentiment"]
         reasoning = llm_result["reasoning"]
     except Exception as exc:

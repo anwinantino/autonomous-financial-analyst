@@ -1,139 +1,103 @@
-"""
-utils/gemini_llm.py — Google Gemini LLM integration (FR-005).
-
-Sends ticker, forecast trend, and news articles to Gemini and
-returns structured sentiment + reasoning. Reads GEMINI_API_KEY
-from environment variables only — never hardcoded.
-"""
-
+import os
 import json
 import logging
-import os
-from typing import Dict, Any, List
-
+import asyncio
 import google.generativeai as genai
-from dotenv import load_dotenv
-
+from typing import List
 from app.models.schemas import NewsArticle
-
-load_dotenv(".env.local")  # Load secrets from local env file when running locally
 
 logger = logging.getLogger(__name__)
 
-# Gemini model to use — update if a newer model becomes available
-GEMINI_MODEL = "gemini-1.5-flash"
+# Initialize Gemini
+API_KEY = os.getenv("GEMINI_API_KEY", "")
+if API_KEY:
+    genai.configure(api_key=API_KEY)
+else:
+    logger.warning("GEMINI_API_KEY is not set. Gemini integration will fail.")
 
-# Timeout in seconds for Gemini API calls (FR-005: max 5 seconds)
-REQUEST_TIMEOUT_SECONDS = 5
+# We use Gemini 2.0 Flash for speed
+MODEL_NAME = "gemini-2.0-flash"
+TIMEOUT_SECONDS = 5.0
 
-
-def _get_client() -> genai.GenerativeModel:
+async def analyze_sentiment(ticker: str, trend: str, news: List[NewsArticle]) -> dict:
     """
-    Initializes the Gemini client using the API key from environment.
-    Raises a clear RuntimeError if the key is missing rather than leaking it.
+    Analyzes news sentiment using Gemini and compares it to the ML trend.
+    Returns a dict matching AnalyzeResponse schema components.
+    
+    Includes a hard 5-second timeout and graceful degradation if the API fails.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set. Add it to backend/.env.local or the container environment."
-        )
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(GEMINI_MODEL)
+    if not API_KEY:
+        logger.error("Skipping Gemini analysis: GEMINI_API_KEY not set.")
+        return _fallback_response("API key missing.")
 
+    if not news:
+        return _fallback_response("No news articles found to analyze.")
 
-def analyze_sentiment(
-    ticker: str,
-    trend: str,
-    articles: List[NewsArticle],
-) -> Dict[str, Any]:
-    """
-    Sends a structured prompt to Gemini and returns sentiment + reasoning.
-
-    Args:
-        ticker: The stock/crypto ticker being analyzed.
-        trend: Forecast trend direction — "UP", "DOWN", or "NEUTRAL".
-        articles: List of NewsArticle objects from DuckDuckGo.
-
-    Returns:
-        Dict with keys:
-          - sentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL"
-          - reasoning: natural-language explanation string
-
-    Raises:
-        Exception: Any Gemini API or parsing error; caller handles degradation.
-    """
-    model = _get_client()
-    prompt = _build_prompt(ticker=ticker, trend=trend, articles=articles)
-
-    logger.info("Sending prompt to Gemini | ticker=%s | model=%s", ticker, GEMINI_MODEL)
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            temperature=0.3,  # Low temp for deterministic, factual responses
-        ),
+    news_text = "\n\n".join(
+        [f"Headline: {n.title}\nSnippet: {n.snippet}" for n in news]
     )
 
-    result = _parse_response(response.text)
-    logger.info("Gemini response received | ticker=%s | sentiment=%s", ticker, result["sentiment"])
-    return result
-
-
-# ── Private helpers ───────────────────────────────────────────────────────────
-
-def _build_prompt(ticker: str, trend: str, articles: List[NewsArticle]) -> str:
+    prompt = f"""
+    You are an expert financial analyst. A machine learning model has predicted that the price trend for {ticker} over the next 30 days will be {trend}.
+    
+    Here are the latest news snippets for {ticker}:
+    {news_text}
+    
+    Based ONLY on the provided news, determine if the current sentiment is ALIGNED, CONFLICTING, or UNCERTAIN with the ML prediction trend ({trend}).
+    
+    Return your response STRICTLY as a JSON object (do not include markdown formatting):
+    {{
+        "sentiment": "POSITIVE" | "NEGATIVE" | "NEUTRAL",
+        "verdict": "ALIGNED" | "CONFLICTING" | "UNCERTAIN",
+        "summary": "1-2 sentence summary of the news",
+        "reasoning": "1-2 sentence explanation of your verdict",
+        "confidence": 0.85
+    }}
     """
-    Constructs the structured prompt sent to Gemini.
-    The prompt enforces a JSON response format to simplify parsing.
-    """
-    articles_text = "\n".join(
-        f"- [{a.source or 'Unknown'}] {a.title}: {a.snippet}" for a in articles
-    )
-
-    return f"""You are a financial analyst assistant. Analyze the following news articles
-about {ticker} and determine the overall market sentiment.
-
-FORECAST CONTEXT:
-- Ticker: {ticker}
-- ML Forecast Trend: {trend} (based on 30-day Prophet model)
-
-NEWS ARTICLES:
-{articles_text}
-
-TASK:
-Based on the news articles above, respond with a JSON object containing:
-1. "sentiment": one of "POSITIVE", "NEGATIVE", or "NEUTRAL"
-2. "reasoning": a 2-3 sentence explanation of why you chose this sentiment,
-   and whether the news supports or contradicts the forecast trend of {trend}.
-
-Respond ONLY with valid JSON. Example format:
-{{
-  "sentiment": "POSITIVE",
-  "reasoning": "Recent earnings beat and product launches signal strong growth..."
-}}"""
-
-
-def _parse_response(raw_text: str) -> Dict[str, Any]:
-    """
-    Parses Gemini's JSON response and validates required fields.
-    Falls back to NEUTRAL sentiment if parsing fails.
-    """
+    
     try:
-        data = json.loads(raw_text)
-        sentiment = data.get("sentiment", "NEUTRAL").upper()
-        reasoning = data.get("reasoning", "No reasoning provided.")
-
-        # Validate sentiment is one of the expected values
-        if sentiment not in {"POSITIVE", "NEGATIVE", "NEUTRAL"}:
-            logger.warning("Unexpected sentiment value from Gemini: %s", sentiment)
-            sentiment = "NEUTRAL"
-
-        return {"sentiment": sentiment, "reasoning": reasoning}
-
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to parse Gemini JSON response | error=%s | raw=%s", exc, raw_text[:200])
+        model = genai.GenerativeModel(
+            MODEL_NAME,
+            generation_config=genai.GenerationConfig(
+                temperature=0.2,
+                response_mime_type="application/json"
+            )
+        )
+        
+        # Run synchronous generate_content in a thread to allow asyncio timeout
+        response = await asyncio.wait_for(
+            asyncio.to_thread(model.generate_content, prompt),
+            timeout=TIMEOUT_SECONDS
+        )
+        
+        # Parse response
+        result = json.loads(response.text)
+        
+        # Ensure schema fields exist
         return {
-            "sentiment": "NEUTRAL",
-            "reasoning": "Could not parse AI response. Defaulting to neutral sentiment.",
+            "sentiment": result.get("sentiment", "NEUTRAL"),
+            "verdict": result.get("verdict", "UNCERTAIN"),
+            "summary": result.get("summary", "Analysis complete."),
+            "reasoning": result.get("reasoning", "LLM processed successfully."),
+            "confidence": float(result.get("confidence", 0.5))
         }
+        
+    except asyncio.TimeoutError:
+        logger.error("Gemini analysis timed out after %s seconds for %s", TIMEOUT_SECONDS, ticker)
+        return _fallback_response("LLM analysis timed out.")
+    except json.JSONDecodeError:
+        logger.error("Failed to parse Gemini response as JSON for %s", ticker)
+        return _fallback_response("LLM returned malformed response.")
+    except Exception as e:
+        logger.error("Gemini analysis failed for %s: %s", ticker, e)
+        return _fallback_response(f"LLM analysis failed: {str(e)}")
+
+def _fallback_response(reason: str) -> dict:
+    """Returns a safe fallback response if Gemini fails or times out."""
+    return {
+        "sentiment": "NEUTRAL",
+        "verdict": "UNCERTAIN",
+        "summary": "News analysis is currently unavailable.",
+        "reasoning": reason,
+        "confidence": 0.0
+    }
