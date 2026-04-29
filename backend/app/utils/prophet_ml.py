@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "storage", "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-# Cache TTL (24 hours in seconds)
-CACHE_TTL = 24 * 60 * 60
+# Cache TTL (5 minutes in seconds) - FR-007
+CACHE_TTL = 300
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ def generate_forecast(ticker: str, forecast_days: int = 30) -> PredictResponse:
 def _fetch_historical_data(ticker: str) -> pd.DataFrame:
     """Downloads at least 2 years of daily closing prices from yfinance."""
     logger.info("Downloading historical data | ticker=%s", ticker)
-    df = yf.download(ticker, period="2y", auto_adjust=True, progress=False)
+    df = yf.download(ticker, period="1y", auto_adjust=True, progress=False)
 
     if df.empty:
         raise ValueError(f"Ticker '{ticker}' not found or returned no data. Check the spelling.")

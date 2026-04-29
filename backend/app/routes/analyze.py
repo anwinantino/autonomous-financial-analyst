@@ -68,7 +68,11 @@ async def analyze(
         reasoning = "AI analysis is temporarily unavailable. Showing news without sentiment verdict."
 
     # Step 3: Compute alignment verdict
-    verdict_result = compute_verdict(trend=trend, sentiment=sentiment)
+    verdict_result = compute_verdict(
+        trend=trend, 
+        sentiment=sentiment, 
+        llm_confidence=llm_result.get("confidence", 0.5) if "llm_result" in locals() else 0.5
+    )
 
     logger.info(
         "Analysis complete | ticker=%s | sentiment=%s | verdict=%s",
