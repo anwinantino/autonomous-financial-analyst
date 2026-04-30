@@ -11,7 +11,8 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Hard timeout per request (ms) — FR-015
-const REQUEST_TIMEOUT_MS = 10_000;
+// Set to 60s to accommodate Render Free Tier cold starts (~30s) + Prophet training (~5s)
+const REQUEST_TIMEOUT_MS = 60_000;
 
 // ── Response types ─────────────────────────────────────────────────────────
 
@@ -88,7 +89,9 @@ async function fetchWithTimeout(url: string): Promise<Response> {
     return response;
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("Request took too long. Please try again.");
+      throw new Error(
+        "Request took too long. The server might be waking up from a cold start. Please try again in 30 seconds."
+      );
     }
     // Network-level failure (no internet, server down)
     throw new Error("Connection failed. Check your internet connection.");

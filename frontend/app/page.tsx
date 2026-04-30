@@ -124,7 +124,7 @@ export default function HomePage() {
 
             {/* Predict section (FR-014: independent spinner) */}
             {isPredicting && (
-              <LoadingSpinner message="Generating 30-day forecast…" />
+              <LoadingSpinner message="Generating forecast (waking up server...)" />
             )}
             {/* FR-015: Isolated predict error — analysis section still shows */}
             {predictError && !isPredicting && (
@@ -143,7 +143,7 @@ export default function HomePage() {
 
             {/* Analyze section (FR-014: independent spinner) */}
             {isAnalyzing && (
-              <LoadingSpinner message="Running AI sentiment analysis…" />
+              <LoadingSpinner message="Running AI analysis (fetching news...)" />
             )}
             {/* FR-015: Isolated analyze error — chart still shows */}
             {analyzeError && !isAnalyzing && (
