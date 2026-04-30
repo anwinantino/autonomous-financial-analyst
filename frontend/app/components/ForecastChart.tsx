@@ -1,12 +1,12 @@
 /**
- * components/ForecastChart.tsx — FR-012: Chart.js price forecast visualization.
+ * components/ForecastChart.tsx — FR-012: Combined historical + forecast chart.
  *
- * Renders:
- *  - Forecast price line (dashed violet)
- *  - Confidence interval band (semi-transparent fill between lower/upper bounds)
- *  - Interactive tooltips with price + date
- *  - Responsive sizing
- *  - Legend distinguishing data types
+ * Layout:
+ *  LEFT  → Last 90 days of ACTUAL closing prices (solid white line)
+ *  RIGHT → 30-day PROPHET FORECAST (dashed violet line)
+ *  BAND  → Confidence interval (upper/lower bounds, violet fill) over forecast only
+ *
+ * A vertical "Today" annotation separates the two segments visually.
  */
 
 "use client";
@@ -22,11 +22,11 @@ import {
   Legend,
   type ChartOptions,
   type ChartData,
+  type Plugin,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { PredictResponse } from "@/utils/api";
 
-// Register all required Chart.js modules
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -41,55 +41,142 @@ interface ForecastChartProps {
   data: PredictResponse;
 }
 
-export default function ForecastChart({ data }: ForecastChartProps) {
-  const { dates, prices, lower_bound, upper_bound, trend, current_price } = data;
+// ── "Today" vertical line plugin ──────────────────────────────────────────
+// Draws a vertical divider between historical and forecast zones.
+const todayLinePlugin: Plugin<"line"> = {
+  id: "todayLine",
+  afterDraw(chart) {
+    const meta = chart.getDatasetMeta(0); // historical dataset
+    if (!meta.data.length) return;
 
-  // Trend badge colour
+    const lastHistoricalPoint = meta.data[meta.data.length - 1];
+    if (!lastHistoricalPoint) return;
+
+    const { ctx, chartArea } = chart;
+    const x = lastHistoricalPoint.x;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+
+    // "Today" label
+    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+    ctx.font = "10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Today", x, chartArea.top - 6);
+    ctx.restore();
+  },
+};
+
+export default function ForecastChart({ data }: ForecastChartProps) {
+  const {
+    historical_dates,
+    historical_prices,
+    dates,
+    prices,
+    lower_bound,
+    upper_bound,
+    trend,
+    current_price,
+  } = data;
+
   const trendColor =
-    trend === "UP"
-      ? "#34d399"
-      : trend === "DOWN"
-      ? "#f87171"
-      : "#94a3b8";
+    trend === "UP" ? "#34d399" : trend === "DOWN" ? "#f87171" : "#94a3b8";
+
+  // ── Merge labels: history + forecast ─────────────────────────────────────
+  // The historical section occupies indices 0..H-1
+  // The forecast section occupies indices H..H+F-1
+  const H = historical_dates.length;
+  const allLabels = [...historical_dates, ...dates];
+
+  // ── Dataset 1: Historical actuals ─────────────────────────────────────────
+  // Solid white/slate line for the left portion, null for the forecast zone.
+  const historicalData: (number | null)[] = [
+    ...historical_prices,
+    ...Array(dates.length).fill(null),
+  ];
+
+  // ── Dataset 2: Upper bound (invisible, used for fill reference) ───────────
+  const upperData: (number | null)[] = [
+    ...Array(H).fill(null),
+    ...upper_bound,
+  ];
+
+  // ── Dataset 3: Lower bound (invisible, fills down to here from upper) ─────
+  const lowerData: (number | null)[] = [
+    ...Array(H).fill(null),
+    ...lower_bound,
+  ];
+
+  // ── Dataset 4: Forecast line ──────────────────────────────────────────────
+  // Null for the history zone, then the prophet yhat values.
+  // We bridge the gap by adding the last historical price at index H-1.
+  const forecastData: (number | null)[] = [
+    ...Array(H - 1).fill(null),
+    historical_prices[H - 1], // bridge point = last known actual
+    ...prices,
+  ];
 
   const chartData: ChartData<"line"> = {
-    labels: dates,
+    labels: allLabels,
     datasets: [
-      // ── Upper confidence bound (transparent, used for fill reference) ──
+      // 1. Historical actual prices
+      {
+        label: "Historical Price",
+        data: historicalData,
+        borderColor: "rgba(255, 255, 255, 0.75)",
+        backgroundColor: "transparent",
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: "rgba(255,255,255,0.9)",
+        tension: 0.25,
+        spanGaps: false,
+        order: 1,
+      },
+      // 2. Upper confidence bound (fill reference, legend-hidden)
       {
         label: "Upper Bound",
-        data: upper_bound,
+        data: upperData,
         borderColor: "transparent",
-        backgroundColor: "rgba(139, 92, 246, 0.08)",
+        backgroundColor: "rgba(139, 92, 246, 0.10)",
         pointRadius: 0,
-        fill: "+1", // fill down to Lower Bound dataset
+        fill: "+1", // fills down to Lower Bound dataset (index 3)
         tension: 0.35,
-        order: 3,
+        spanGaps: false,
+        order: 4,
       },
-      // ── Lower confidence bound ───────────────────────────────────────
+      // 3. Lower confidence bound
       {
-        label: "Confidence Interval",
-        data: lower_bound,
+        label: "Confidence Band",
+        data: lowerData,
         borderColor: "transparent",
-        backgroundColor: "rgba(139, 92, 246, 0.08)",
+        backgroundColor: "rgba(139, 92, 246, 0.10)",
         pointRadius: 0,
         fill: false,
         tension: 0.35,
-        order: 4,
+        spanGaps: false,
+        order: 5,
       },
-      // ── Forecast price line ──────────────────────────────────────────
+      // 4. Prophet forecast line
       {
         label: "30-Day Forecast",
-        data: prices,
+        data: forecastData,
         borderColor: "#8b5cf6",
-        backgroundColor: "rgba(139, 92, 246, 0.0)",
+        backgroundColor: "transparent",
         borderWidth: 2.5,
         borderDash: [6, 4],
         pointRadius: 0,
         pointHoverRadius: 5,
         pointHoverBackgroundColor: "#8b5cf6",
         tension: 0.35,
-        order: 1,
+        spanGaps: false,
+        order: 2,
       },
     ],
   };
@@ -97,6 +184,7 @@ export default function ForecastChart({ data }: ForecastChartProps) {
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: true,
+    layout: { padding: { top: 16 } }, // room for "Today" label
     interaction: {
       mode: "index",
       intersect: false,
@@ -106,33 +194,36 @@ export default function ForecastChart({ data }: ForecastChartProps) {
         position: "top",
         align: "end",
         labels: {
-          color: "rgba(255,255,255,0.5)",
+          color: "rgba(255,255,255,0.45)",
           boxWidth: 14,
           usePointStyle: true,
           pointStyle: "line",
-          font: { size: 12, family: "Inter, sans-serif" },
+          font: { size: 11, family: "Inter, sans-serif" },
           filter: (item) =>
-            // Hide the "Upper Bound" raw dataset from the legend
-            item.text !== "Upper Bound",
+            item.text !== "Upper Bound" && item.text !== "Confidence Band",
         },
       },
       tooltip: {
         backgroundColor: "rgba(2, 6, 23, 0.92)",
-        borderColor: "rgba(139, 92, 246, 0.4)",
+        borderColor: "rgba(139, 92, 246, 0.35)",
         borderWidth: 1,
-        titleColor: "rgba(255,255,255,0.9)",
-        bodyColor: "rgba(255,255,255,0.6)",
+        titleColor: "rgba(255,255,255,0.85)",
+        bodyColor: "rgba(255,255,255,0.55)",
         padding: 12,
         displayColors: false,
         callbacks: {
           title: (items) => items[0]?.label ?? "",
           label: (ctx) => {
+            if (ctx.raw === null) return "";
+            const val = `$${Number(ctx.raw).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            if (ctx.dataset.label === "Historical Price")
+              return `  Actual    ${val}`;
             if (ctx.dataset.label === "30-Day Forecast")
-              return `  Forecast  $${Number(ctx.raw).toFixed(2)}`;
-            if (ctx.dataset.label === "Confidence Interval")
-              return `  Low       $${Number(ctx.raw).toFixed(2)}`;
+              return `  Forecast  ${val}`;
+            if (ctx.dataset.label === "Confidence Band")
+              return `  Low       ${val}`;
             if (ctx.dataset.label === "Upper Bound")
-              return `  High      $${Number(ctx.raw).toFixed(2)}`;
+              return `  High      ${val}`;
             return "";
           },
         },
@@ -141,19 +232,21 @@ export default function ForecastChart({ data }: ForecastChartProps) {
     scales: {
       x: {
         ticks: {
-          color: "rgba(255,255,255,0.3)",
-          maxTicksLimit: 6,
-          font: { size: 11, family: "Inter, sans-serif" },
+          color: "rgba(255,255,255,0.25)",
+          maxTicksLimit: 7,
+          maxRotation: 0,
+          font: { size: 10, family: "Inter, sans-serif" },
         },
         grid: { color: "rgba(255,255,255,0.04)" },
         border: { color: "transparent" },
       },
       y: {
         ticks: {
-          color: "rgba(255,255,255,0.3)",
+          color: "rgba(255,255,255,0.25)",
           maxTicksLimit: 5,
-          font: { size: 11, family: "Inter, sans-serif" },
-          callback: (val) => `$${Number(val).toLocaleString()}`,
+          font: { size: 10, family: "Inter, sans-serif" },
+          callback: (val) =>
+            `$${Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
         },
         grid: { color: "rgba(255,255,255,0.04)" },
         border: { color: "transparent" },
@@ -163,12 +256,17 @@ export default function ForecastChart({ data }: ForecastChartProps) {
 
   return (
     <div id="price-chart" className="glass glass-hover p-5 fade-up overflow-hidden">
-      {/* Chart header */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <p className="text-white/40 text-xs uppercase tracking-widest">30-Day Forecast</p>
+          <p className="text-white/35 text-xs uppercase tracking-widest">
+            90-Day History + 30-Day Forecast
+          </p>
           <p className="text-white text-2xl font-bold mt-0.5">
-            ${current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${current_price.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
             <span className="text-white/30 text-sm font-normal ml-1">current</span>
           </p>
         </div>
@@ -184,9 +282,31 @@ export default function ForecastChart({ data }: ForecastChartProps) {
         </span>
       </div>
 
-      {/* Chart canvas */}
+      {/* Chart */}
       <div className="w-full overflow-hidden">
-        <Line data={chartData} options={options} />
+        <Line data={chartData} options={options} plugins={[todayLinePlugin]} />
+      </div>
+
+      {/* Legend hint */}
+      <div className="flex items-center gap-4 mt-3 px-1">
+        <div className="flex items-center gap-1.5">
+          <span className="w-5 h-0.5 bg-white/60 rounded-full inline-block" />
+          <span className="text-white/30 text-xs">Actual</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-5 h-0.5 rounded-full inline-block"
+            style={{ background: "#8b5cf6", borderTop: "2px dashed #8b5cf6", height: 0 }}
+          />
+          <span className="text-white/30 text-xs">Forecast</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-5 h-2.5 rounded-sm inline-block"
+            style={{ background: "rgba(139,92,246,0.2)" }}
+          />
+          <span className="text-white/30 text-xs">Confidence Band</span>
+        </div>
       </div>
     </div>
   );

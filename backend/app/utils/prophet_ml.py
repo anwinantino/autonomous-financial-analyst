@@ -205,9 +205,19 @@ def _build_response(
     forecast_days: int,
     metrics_dict: Dict[str, float]
 ) -> PredictResponse:
-    """Assembles the PredictResponse."""
-    forecast_only = forecast.tail(forecast_days).copy()
+    """
+    Assembles the PredictResponse.
 
+    Returns the last 90 days of actual historical prices alongside the
+    30-day forecast so the frontend can render both on the same chart.
+    """
+    # ── Historical actuals: last 90 trading days ──────────────────────────
+    history_window = historical_df.tail(90).copy()
+    historical_dates = history_window["ds"].dt.strftime("%Y-%m-%d").tolist()
+    historical_prices = history_window["y"].round(2).tolist()
+
+    # ── 30-day forecast window ────────────────────────────────────────────
+    forecast_only = forecast.tail(forecast_days).copy()
     dates = forecast_only["ds"].dt.strftime("%Y-%m-%d").tolist()
     prices = forecast_only["yhat"].round(2).tolist()
     lower_bound = forecast_only["yhat_lower"].round(2).tolist()
@@ -215,7 +225,7 @@ def _build_response(
 
     trend = _determine_trend(forecast, forecast_days)
     current_price = round(float(historical_df["y"].iloc[-1]), 2)
-    
+
     metrics = ModelMetrics(
         mape=metrics_dict["mape"],
         rmse=metrics_dict["rmse"],
@@ -223,6 +233,8 @@ def _build_response(
     )
 
     return PredictResponse(
+        historical_dates=historical_dates,
+        historical_prices=historical_prices,
         dates=dates,
         prices=prices,
         lower_bound=lower_bound,

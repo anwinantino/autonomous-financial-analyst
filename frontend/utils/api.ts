@@ -16,6 +16,10 @@ const REQUEST_TIMEOUT_MS = 10_000;
 // ── Response types ─────────────────────────────────────────────────────────
 
 export interface PredictResponse {
+  // Last 90 days of actual closing prices
+  historical_dates: string[];
+  historical_prices: number[];
+  // 30-day forecast
   dates: string[];
   prices: number[];
   lower_bound: number[];

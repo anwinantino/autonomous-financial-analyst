@@ -26,18 +26,28 @@ class ModelMetrics(BaseModel):
 class PredictResponse(BaseModel):
     """Response schema for the /predict endpoint (FR-007)."""
 
+    # ── Historical actuals (last 90 days) ─────────────────────────────────
+    historical_dates: List[str] = Field(
+        ..., description="ISO date strings for the last 90 days of actual closing prices."
+    )
+    historical_prices: List[float] = Field(
+        ..., description="Actual historical closing prices aligned with historical_dates."
+    )
+
+    # ── 30-day forecast ───────────────────────────────────────────────────
     dates: List[str] = Field(
-        ..., description="ISO date strings for historical + forecast period."
+        ..., description="ISO date strings for the 30-day forecast window."
     )
     prices: List[float] = Field(
-        ..., description="Predicted closing prices aligned with dates."
+        ..., description="Prophet yhat (predicted closing prices) for forecast window."
     )
     lower_bound: List[float] = Field(
-        ..., description="Prophet yhat_lower confidence interval."
+        ..., description="Prophet yhat_lower confidence interval for forecast window."
     )
     upper_bound: List[float] = Field(
-        ..., description="Prophet yhat_upper confidence interval."
+        ..., description="Prophet yhat_upper confidence interval for forecast window."
     )
+
     trend: Literal["UP", "DOWN", "NEUTRAL"] = Field(
         ..., description="Overall 30-day price direction."
     )
