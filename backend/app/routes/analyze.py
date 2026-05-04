@@ -19,7 +19,7 @@ from typing import Optional
 
 from app.models.schemas import AnalyzeResponse
 from app.utils.news_retrieval import fetch_news
-from app.utils.gemini_llm import analyze_sentiment
+from app.utils.llm_factory import get_analysis
 from app.utils.comparator import compute_verdict
 
 logger = logging.getLogger(__name__)
@@ -84,40 +84,49 @@ async def analyze(
             status_code=502, detail="News retrieval failed. Please try again."
         )
 
-    # Step 2: Gemini LLM sentiment analysis (graceful degradation)
+    # Step 2: LLM analysis via factory (Gemini or Ollama depending on env)
     llm_result = None
     try:
-        llm_result = await analyze_sentiment(
+        llm_result = await get_analysis(
             ticker=ticker, trend=resolved_trend, news=news_articles
         )
-        sentiment = llm_result["sentiment"]
-        reasoning = llm_result["reasoning"]
+        sentiment  = llm_result["sentiment"]
+        reasoning  = llm_result["reasoning"]
     except Exception as exc:
-        logger.warning("Gemini analysis failed, degrading gracefully | error=%s", exc)
+        logger.warning("LLM analysis failed, degrading gracefully | error=%s", exc)
         sentiment = "NEUTRAL"
         reasoning = (
             "AI analysis is temporarily unavailable. "
             "Showing news without sentiment verdict."
         )
 
-    # Step 3: Compute alignment verdict
-    verdict_result = compute_verdict(
-        trend=resolved_trend,
-        sentiment=sentiment,
-        llm_confidence=llm_result.get("confidence", 0.5) if llm_result else 0.5,
-    )
+    # Step 3: Determine verdict + confidence
+    # If the LLM returned a confident verdict, use it directly.
+    # Only fall back to the rule-based comparator if the LLM failed entirely.
+    if llm_result and llm_result.get("confidence", 0.0) > 0.0:
+        verdict    = llm_result["verdict"]
+        confidence = llm_result["confidence"]
+    else:
+        # Rule-based fallback (LLM unavailable or zero confidence)
+        verdict_result = compute_verdict(
+            trend=resolved_trend,
+            sentiment=sentiment,
+            llm_confidence=0.5,
+        )
+        verdict    = verdict_result["verdict"]
+        confidence = verdict_result["confidence"]
 
     logger.info(
         "Analysis complete | ticker=%s | sentiment=%s | verdict=%s",
         ticker,
         sentiment,
-        verdict_result["verdict"],
+        verdict,
     )
 
     return AnalyzeResponse(
         news=news_articles,
         sentiment=sentiment,
-        verdict=verdict_result["verdict"],
-        confidence=verdict_result["confidence"],
+        verdict=verdict,
+        confidence=confidence,
         reasoning=reasoning,
     )
