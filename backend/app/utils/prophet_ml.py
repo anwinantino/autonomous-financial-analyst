@@ -186,14 +186,25 @@ def _load_cached_model(ticker: str) -> Dict[str, Any] | None:
 
 
 def _determine_trend(forecast: pd.DataFrame, forecast_days: int) -> str:
-    """Compares the last historical close to the final forecasted price."""
+    """
+    Compares the last pre-forecast yhat to the final forecasted price
+    and classifies the overall 30-day direction.
+
+    Threshold: ±0.5%
+      >  0.5% → UP
+      < -0.5% → DOWN
+      else    → NEUTRAL  (genuinely flat / sideways)
+
+    1.5% was too wide: modest but real moves (e.g. $414→$419 on MSFT)
+    were being incorrectly classified as NEUTRAL.
+    """
     last_historical = forecast["yhat"].iloc[-(forecast_days + 1)]
-    last_forecast = forecast["yhat"].iloc[-1]
+    last_forecast   = forecast["yhat"].iloc[-1]
     delta_pct = (last_forecast - last_historical) / last_historical * 100
 
-    if delta_pct > 1.5:
+    if delta_pct > 0.5:
         return "UP"
-    elif delta_pct < -1.5:
+    elif delta_pct < -0.5:
         return "DOWN"
     else:
         return "NEUTRAL"
