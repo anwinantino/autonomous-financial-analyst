@@ -17,6 +17,7 @@ import { fetchPrediction, fetchAnalysis, PredictResponse, AnalyzeResponse } from
 
 export default function HomePage() {
   const [ticker, setTicker] = useState("");
+  const [market, setMarket] = useState("US");
 
   // ── Per-section data ────────────────────────────────────────────────────
   const [predictData, setPredictData] = useState<PredictResponse | null>(null);
@@ -59,13 +60,13 @@ export default function HomePage() {
     // spinner shows from the beginning.
 
     // /predict — chart section
-    fetchPrediction(cleanTicker)
+    fetchPrediction(cleanTicker, market)
       .then((data) => {
         if (runId !== runIdRef.current) return; // stale — discard
         setPredictData(data);
 
         // Now fire /analyze with the REAL trend from the ML model
-        fetchAnalysis(cleanTicker, data.trend)
+        fetchAnalysis(cleanTicker, data.trend, market)
           .then((analyzeResult) => {
             if (runId !== runIdRef.current) return;
             setAnalyzeData(analyzeResult);
@@ -83,7 +84,7 @@ export default function HomePage() {
         if (runId !== runIdRef.current) return;
         setPredictError(err.message);
         // Predict failed — still try /analyze without a trend (graceful degradation)
-        fetchAnalysis(cleanTicker)
+        fetchAnalysis(cleanTicker, undefined, market)
           .then((analyzeResult) => {
             if (runId !== runIdRef.current) return;
             setAnalyzeData(analyzeResult);
@@ -130,7 +131,9 @@ export default function HomePage() {
         {/* ── Ticker Input ─────────────────────────────────────────────── */}
         <TickerInput
           value={ticker}
+          market={market}
           onChange={setTicker}
+          onMarketChange={setMarket}
           onSubmit={handleAnalyze}
           isLoading={isLoading}
         />
@@ -156,7 +159,7 @@ export default function HomePage() {
                 </div>
               </div>
             )}
-            {predictData && !isPredicting && <Chart data={predictData} />}
+            {predictData && !isPredicting && <Chart data={predictData} market={market} />}
 
             {/* Analyze section (FR-014: independent spinner) */}
             {isAnalyzing && (

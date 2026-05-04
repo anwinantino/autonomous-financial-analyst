@@ -50,9 +50,9 @@ export interface AnalyzeResponse {
  * Fetches the 30-day price forecast for a given ticker.
  * Target response time: < 2 seconds (FR-007).
  */
-export async function fetchPrediction(ticker: string): Promise<PredictResponse> {
+export async function fetchPrediction(ticker: string, market: string = "US"): Promise<PredictResponse> {
   const response = await fetchWithTimeout(
-    `${API_BASE_URL}/predict?ticker=${encodeURIComponent(ticker)}`
+    `${API_BASE_URL}/predict?ticker=${encodeURIComponent(ticker)}&market=${encodeURIComponent(market)}`
   );
   return handleResponse<PredictResponse>(response);
 }
@@ -64,11 +64,11 @@ export async function fetchPrediction(ticker: string): Promise<PredictResponse> 
  */
 export async function fetchAnalysis(
   ticker: string,
-  trend?: string
+  trend?: string,
+  market: string = "US",
 ): Promise<AnalyzeResponse> {
-  const url = trend
-    ? `${API_BASE_URL}/analyze?ticker=${encodeURIComponent(ticker)}&trend=${trend}`
-    : `${API_BASE_URL}/analyze?ticker=${encodeURIComponent(ticker)}`;
+  let url = `${API_BASE_URL}/analyze?ticker=${encodeURIComponent(ticker)}&market=${encodeURIComponent(market)}`;
+  if (trend) url += `&trend=${trend}`;
 
   const response = await fetchWithTimeout(url);
   return handleResponse<AnalyzeResponse>(response);

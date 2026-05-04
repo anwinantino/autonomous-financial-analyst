@@ -21,6 +21,7 @@ from app.models.schemas import AnalyzeResponse
 from app.utils.news_retrieval import fetch_news
 from app.utils.llm_factory import get_analysis
 from app.utils.comparator import compute_verdict
+from app.routes.predict import _resolve_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ router = APIRouter(tags=["Analyze"])
 
 TICKER_PATTERN = re.compile(r"^[A-Z0-9\-]{1,12}$")
 VALID_TRENDS = {"UP", "DOWN", "NEUTRAL"}
+VALID_MARKETS = {"US", "NSE", "BSE"}
 
 
 @router.get("/analyze", response_model=AnalyzeResponse)
@@ -38,6 +40,7 @@ async def analyze(
         description="Forecast trend: UP, DOWN, or NEUTRAL. "
                     "If omitted, defaults to NEUTRAL (enables parallel calls with /predict).",
     ),
+    market: str = Query("US", description="Market: US, NSE, or BSE"),
 ):
     """
     Fetches top 5 news articles for the ticker, sends them to Gemini for
@@ -48,12 +51,22 @@ async def analyze(
     `trend` is optional — omit it to allow true parallel frontend calls (FR-013).
     """
     ticker = ticker.upper().strip()
+    market = market.upper().strip()
+
+    if market not in VALID_MARKETS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid market '{market}'. Must be one of: US, NSE, BSE.",
+        )
 
     if not TICKER_PATTERN.match(ticker):
         raise HTTPException(
             status_code=422,
             detail="Invalid ticker format. Use alphanumeric characters and hyphens only.",
         )
+
+    # Apply market-specific suffix / validation
+    formatted_ticker = _resolve_ticker(ticker, market)
 
     # Resolve trend — default to NEUTRAL if not provided (FR-013 parallel support)
     if trend is None:
@@ -70,10 +83,11 @@ async def analyze(
             )
 
     logger.info(
-        "Received /analyze request | ticker=%s | trend=%s", ticker, resolved_trend
+        "Received /analyze request | ticker=%s | formatted=%s | market=%s | trend=%s",
+        ticker, formatted_ticker, market, resolved_trend,
     )
 
-    # Step 1: Fetch news articles
+    # Step 1: Fetch news articles (use base ticker for news — better search results)
     try:
         news_articles = fetch_news(ticker=ticker)
     except Exception as exc:
@@ -88,7 +102,7 @@ async def analyze(
     llm_result = None
     try:
         llm_result = await get_analysis(
-            ticker=ticker, trend=resolved_trend, news=news_articles
+            ticker=formatted_ticker, trend=resolved_trend, news=news_articles
         )
         sentiment  = llm_result["sentiment"]
         reasoning  = llm_result["reasoning"]

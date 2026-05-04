@@ -39,6 +39,7 @@ ChartJS.register(
 
 interface ForecastChartProps {
   data: PredictResponse;
+  market?: string;
 }
 
 // ── "Today" vertical line plugin ──────────────────────────────────────────
@@ -73,7 +74,7 @@ const todayLinePlugin: Plugin<"line"> = {
   },
 };
 
-export default function ForecastChart({ data }: ForecastChartProps) {
+export default function ForecastChart({ data, market = "US" }: ForecastChartProps) {
   const {
     historical_dates,
     historical_prices,
@@ -84,6 +85,9 @@ export default function ForecastChart({ data }: ForecastChartProps) {
     trend,
     current_price,
   } = data;
+
+  // Currency symbol based on market
+  const currencySymbol = market === "NSE" || market === "BSE" ? "₹" : "$";
 
   const trendColor =
     trend === "UP" ? "#34d399" : trend === "DOWN" ? "#f87171" : "#94a3b8";
@@ -215,7 +219,7 @@ export default function ForecastChart({ data }: ForecastChartProps) {
           title: (items) => items[0]?.label ?? "",
           label: (ctx) => {
             if (ctx.raw === null) return "";
-            const val = `$${Number(ctx.raw).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            const val = `${currencySymbol}${Number(ctx.raw).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             if (ctx.dataset.label === "Historical Price")
               return `  Actual    ${val}`;
             if (ctx.dataset.label === "30-Day Forecast")
@@ -246,7 +250,7 @@ export default function ForecastChart({ data }: ForecastChartProps) {
           maxTicksLimit: 5,
           font: { size: 10, family: "Inter, sans-serif" },
           callback: (val) =>
-            `$${Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+            `${currencySymbol}${Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
         },
         grid: { color: "rgba(255,255,255,0.04)" },
         border: { color: "transparent" },
@@ -263,7 +267,7 @@ export default function ForecastChart({ data }: ForecastChartProps) {
             90-Day History + 30-Day Forecast
           </p>
           <p className="text-white text-2xl font-bold mt-0.5">
-            ${current_price.toLocaleString(undefined, {
+            {currencySymbol}{current_price.toLocaleString(undefined, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
