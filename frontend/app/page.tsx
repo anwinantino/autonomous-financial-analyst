@@ -50,39 +50,56 @@ export default function HomePage() {
     setIsPredicting(true);
     setIsAnalyzing(true);
 
-    // ── FR-013: TRUE PARALLEL CALLS ────────────────────────────────────────
-    // Both /predict and /analyze are started at the same moment.
-    // Neither call waits for the other — each resolves independently
-    // and updates only its own section of the UI.
+    // ── FR-013 UPDATE: /predict first, then /analyze with the real trend ───
+    // /analyze needs the ML trend to give an accurate verdict.
+    // Calling both in true parallel caused /analyze to always receive NEUTRAL
+    // (the backend default), making the LLM comparison meaningless.
+    // Fix: fire /predict, update the chart immediately, then fire /analyze
+    // with the resolved trend. Analyse loading state starts upfront so the
+    // spinner shows from the beginning.
 
     // /predict — chart section
     fetchPrediction(cleanTicker)
       .then((data) => {
         if (runId !== runIdRef.current) return; // stale — discard
         setPredictData(data);
+
+        // Now fire /analyze with the REAL trend from the ML model
+        fetchAnalysis(cleanTicker, data.trend)
+          .then((analyzeResult) => {
+            if (runId !== runIdRef.current) return;
+            setAnalyzeData(analyzeResult);
+          })
+          .catch((err: Error) => {
+            if (runId !== runIdRef.current) return;
+            setAnalyzeError(err.message);
+          })
+          .finally(() => {
+            if (runId !== runIdRef.current) return;
+            setIsAnalyzing(false);
+          });
       })
       .catch((err: Error) => {
         if (runId !== runIdRef.current) return;
         setPredictError(err.message);
+        // Predict failed — still try /analyze without a trend (graceful degradation)
+        fetchAnalysis(cleanTicker)
+          .then((analyzeResult) => {
+            if (runId !== runIdRef.current) return;
+            setAnalyzeData(analyzeResult);
+          })
+          .catch((analyzeErr: Error) => {
+            if (runId !== runIdRef.current) return;
+            setAnalyzeError(analyzeErr.message);
+          })
+          .finally(() => {
+            if (runId !== runIdRef.current) return;
+            setIsAnalyzing(false);
+          });
       })
       .finally(() => {
         if (runId !== runIdRef.current) return;
         setIsPredicting(false);
-      });
-
-    // /analyze — sentiment section (no trend arg = parallel-safe)
-    fetchAnalysis(cleanTicker)
-      .then((data) => {
-        if (runId !== runIdRef.current) return; // stale — discard
-        setAnalyzeData(data);
-      })
-      .catch((err: Error) => {
-        if (runId !== runIdRef.current) return;
-        setAnalyzeError(err.message);
-      })
-      .finally(() => {
-        if (runId !== runIdRef.current) return;
-        setIsAnalyzing(false);
       });
   };
 
